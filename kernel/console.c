@@ -12,7 +12,10 @@
 #include "x86.h"
 #include "printf.h"
 
+#include "search.h"
+
 #include <stdarg.h>
+#
 
 static void consputc(int);
 
@@ -130,12 +133,70 @@ struct {
 } input;
 
 #define C(x)  ((x)-'@')  // Control-x
+#define A(x) (x + 95)
+
+void
+searchintr(int (*getc)(void))
+{
+	int c = 0;
+
+	acquire(&cons.lock);
+	while((c = getc()) >= 0){
+		switch(c){
+			case C('U'):  // Kill line.
+				while(input.e != input.w &&
+					input.buf[(input.e-1) % INPUT_BUF] != '\n'){
+					input.e--;
+				consputc(BACKSPACE);
+					}
+					break;
+			case C('H'): case '\x7f':  // Backspace
+				if(input.e != input.w){
+					input.e--;
+					consputc(BACKSPACE);
+				}
+				break;
+			case A('F'):
+				searching = 0;
+
+				for (int i = 0; i < 1920; i++) {
+					crt[i] = (crt[i] & 0xFF) | 0x0700;
+				}
+
+				for (int i = 0; i < 80; i++) {
+					crt[1920 + i] = (' ' & 0xFF) | 0x0700;
+				}
+
+				outb(CRTPORT, 14);
+				outb(CRTPORT+1, old_pos>>8);
+				outb(CRTPORT, 15);
+				outb(CRTPORT+1, old_pos);
+				crt[old_pos] = ' ' | 0x0700;
+
+				break;
+			case A('N'):
+
+				break;
+			case A('P'):
+
+				break;
+			default:
+
+				break;
+		}
+		release(&cons.lock);
+	}
+}
 
 void
 consoleintr(int (*getc)(void))
 {
+	if(searching){
+		searchintr(getc);
+		return;
+	}
+
 	int c, doprocdump = 0;
-	static int searching = 0;
 
 	acquire(&cons.lock);
 	while((c = getc()) >= 0){
@@ -157,25 +218,34 @@ consoleintr(int (*getc)(void))
 				consputc(BACKSPACE);
 			}
 			break;
-		case 0xFF:	// Alt + F
-			searching ^= 1;
-			int color = searching ? 0xF000 : 0x0700;
+		case A('F'):
+			searching = 1;
+			char prompt[] = "Search:";
+			int plen = 7;
+			int pos = 24 * 80;
 
-			for (int i = 0; i < 1920; i++) {
-				crt[i] = (crt[i] & 0xFF) | color;
+			for (int i = 0; i < 24 * 80; i++) {
+				crt[i] = (crt[i] & 0xFF) | 0xF000;
 			}
 
-			if (searching) {
-				char prompt[] = "Search:";
-
-				for (int i = 0; i < 7; i++) {
-					crt[1920 + i] = (prompt[i] & 0xFF) | 0x0200;
-				}
-			} else {
-				for (int i = 0; i < 80; i++) {
-					crt[1920 + i] = (' ' & 0xFF) | color;
-				}
+			for (int i = 0; i < plen; i++) {
+				crt[pos++] = (prompt[i] & 0xFF) | 0x0200;
 			}
+
+			for (int i = 0; i < qlen; i++) {
+				crt[pos++] = (query[i] & 0xFF) | 0x0700;
+			}
+
+			outb(CRTPORT, 14);
+			old_pos = inb(CRTPORT+1) << 8;
+			outb(CRTPORT, 15);
+			old_pos |= inb(CRTPORT+1);
+
+			outb(CRTPORT, 14);
+			outb(CRTPORT+1, pos>>8);
+			outb(CRTPORT, 15);
+			outb(CRTPORT+1, pos);
+			crt[pos] = ' ' | 0x0700;
 
 			break;
 		default:

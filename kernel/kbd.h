@@ -35,6 +35,7 @@
 
 // C('A') == Control-A
 #define C(x) (x - '@')
+#define A(x) (x + 95)
 
 static uchar shiftcode[256] =
 {
@@ -117,7 +118,13 @@ static uchar ctlmap[256] =
 
 static uchar altmap[256] =
 {
-	[0x21] 0xFF
+	NO,      NO,      NO,      NO,      NO,      NO,      NO,      NO,
+	NO,      NO,      NO,      NO,      NO,      NO,      NO,      NO,
+	A('Q'),  A('W'),  A('E'),  A('R'),  A('T'),  A('Y'),  A('U'),  A('I'),
+	A('O'),  A('P'),  NO,      NO,      '\r',    NO,      A('A'),  A('S'),
+	A('D'),  A('F'),  A('G'),  A('H'),  A('J'),  A('K'),  A('L'),  NO,
+	NO,      NO,      NO,      A('\\'), A('Z'),  A('X'),  A('C'),  A('V'),
+	A('B'),  A('N'),  A('M')
 };
 
 #endif // KERNEL_KBD_H
