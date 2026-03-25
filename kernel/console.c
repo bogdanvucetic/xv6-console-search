@@ -15,7 +15,6 @@
 #include "search.h"
 
 #include <stdarg.h>
-#
 
 static void consputc(int);
 
@@ -121,6 +120,7 @@ consputc(int c)
 		uartputc('\b'); uartputc(' '); uartputc('\b');
 	} else
 		uartputc(c);
+
 	cgaputc(c);
 }
 
@@ -133,7 +133,98 @@ struct {
 } input;
 
 #define C(x)  ((x)-'@')  // Control-x
-#define A(x) (x + 95)
+
+#define ALT_P			0x1C
+#define ALT_F			0x1D
+#define ALT_N			0x1E
+
+void
+put_query_char(int c)
+{
+	int pos;
+
+	// Cursor position: col + 80*row.
+	outb(CRTPORT, 14);
+	pos = inb(CRTPORT+1) << 8;
+	outb(CRTPORT, 15);
+	pos |= inb(CRTPORT+1);
+
+	if (c == BACKSPACE){
+		if(pos > 0) --pos;
+	} else
+		crt[pos++] = (c&0xff) | 0x0700;
+
+	if(pos < 24*80 || pos > 25*80)
+		panic("pos under/overflow");
+
+	outb(CRTPORT, 14);
+	outb(CRTPORT+1, pos>>8);
+	outb(CRTPORT, 15);
+	outb(CRTPORT+1, pos);
+	crt[pos] = ' ' | 0x0700;
+}
+
+void
+clear_highlights()
+{
+	for (int i = 0; i < 1920; i++) {
+		crt[i] = (crt[i] & 0xFF) | SEARCH_COLOR;
+	}
+}
+
+void
+paint_highlighs()
+{
+	clear_highlights();
+
+	int addr;
+
+	for (int i = 0; i < mnum; i++) {
+		for (int j = 0; j < qlen; j++) {
+			addr = matches[i] + j;
+			crt[addr] = (crt[addr] & 0xFF) | HIGHLIGHT_COLOR;
+		}
+	}
+}
+
+void
+update_query(int c)
+{
+	if(c == BACKSPACE){
+		if (qlen <= 0) return;
+
+		query[--qlen] = '\0';
+
+		if(qlen == 0){
+			put_query_char(c);
+			clear_highlights();
+			return;
+		}
+	} else {
+		query[qlen++] = c;
+	}
+
+	mnum = 0;
+	int matching;
+
+	for (int i = 0; i < 1920 - qlen + 1; i++) {
+		matching = 1;
+
+		for (int j = 0; j < qlen; j++) {
+			if ((crt[i + j] & 0xFF) != query[j]) {
+				matching = 0;
+				break;
+			}
+		}
+
+		if (matching) {
+			matches[mnum++] = i;
+		}
+	}
+
+	put_query_char(c);
+	paint_highlighs();
+}
 
 void
 searchintr(int (*getc)(void))
@@ -143,21 +234,13 @@ searchintr(int (*getc)(void))
 	acquire(&cons.lock);
 	while((c = getc()) >= 0){
 		switch(c){
-			case C('U'):  // Kill line.
-				while(input.e != input.w &&
-					input.buf[(input.e-1) % INPUT_BUF] != '\n'){
-					input.e--;
-				consputc(BACKSPACE);
-					}
-					break;
-			case C('H'): case '\x7f':  // Backspace
-				if(input.e != input.w){
-					input.e--;
-					consputc(BACKSPACE);
-				}
+			case '\n':
 				break;
-			case A('F'):
-				searching = 0;
+			case C('H'): case '\x7f':  // Backspace
+				update_query(BACKSPACE);
+				break;
+			case ALT_F: // Exit
+				search_mode_active = 0;
 
 				for (int i = 0; i < 1920; i++) {
 					crt[i] = (crt[i] & 0xFF) | 0x0700;
@@ -174,24 +257,26 @@ searchintr(int (*getc)(void))
 				crt[old_pos] = ' ' | 0x0700;
 
 				break;
-			case A('N'):
+			case ALT_P: // Prev
 
 				break;
-			case A('P'):
+			case ALT_N: // Next
 
 				break;
 			default:
-
+				if(c != 0 && qlen < query_capacity){
+					update_query(c);
+				}
 				break;
 		}
-		release(&cons.lock);
 	}
+	release(&cons.lock);
 }
 
 void
 consoleintr(int (*getc)(void))
 {
-	if(searching){
+	if(search_mode_active){
 		searchintr(getc);
 		return;
 	}
@@ -218,22 +303,23 @@ consoleintr(int (*getc)(void))
 				consputc(BACKSPACE);
 			}
 			break;
-		case A('F'):
-			searching = 1;
-			char prompt[] = "Search:";
-			int plen = 7;
+		case ALT_F:
+			search_mode_active = 1;
+
+			char prompt[] = PROMPT;
 			int pos = 24 * 80;
 
 			for (int i = 0; i < 24 * 80; i++) {
-				crt[i] = (crt[i] & 0xFF) | 0xF000;
+				crt[i] = (crt[i] & 0xFF) | SEARCH_COLOR;
 			}
 
-			for (int i = 0; i < plen; i++) {
+			for (int i = 0; i < PROMPT_LEN; i++) {
 				crt[pos++] = (prompt[i] & 0xFF) | 0x0200;
 			}
 
 			for (int i = 0; i < qlen; i++) {
 				crt[pos++] = (query[i] & 0xFF) | 0x0700;
+				paint_highlighs();
 			}
 
 			outb(CRTPORT, 14);
@@ -247,6 +333,8 @@ consoleintr(int (*getc)(void))
 			outb(CRTPORT+1, pos);
 			crt[pos] = ' ' | 0x0700;
 
+			break;
+		case ALT_P: case ALT_N:
 			break;
 		default:
 			if(c != 0 && input.e-input.r < INPUT_BUF){
@@ -331,4 +419,3 @@ consoleinit(void)
 
 	ioapicenable(IRQ_KBD, 0);
 }
-
