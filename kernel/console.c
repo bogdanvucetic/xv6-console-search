@@ -269,10 +269,12 @@ searchintr(int (*getc)(void))
 
 				break;
 			case ALT_P: // Prev
-
+				curr_highlighted = (curr_highlighted + mnum - 1) % mnum;
+				paint_highlighs();
 				break;
 			case ALT_N: // Next
-
+				curr_highlighted = (curr_highlighted + mnum + 1) % mnum;
+				paint_highlighs();
 				break;
 			default:
 				if(c != 0 && qlen < query_capacity){
