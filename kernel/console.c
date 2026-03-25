@@ -156,6 +156,9 @@ consoleintr(int (*getc)(void))
 				consputc(BACKSPACE);
 			}
 			break;
+		case 0xFF:
+
+			break;
 		default:
 			if(c != 0 && input.e-input.r < INPUT_BUF){
 				c = (c == '\r') ? '\n' : c;
