@@ -180,9 +180,11 @@ paint_highlighs()
 	int addr;
 
 	for (int i = 0; i < mnum; i++) {
+		short color = i == curr_highlighted ? 0x2F00 : HIGHLIGHT_COLOR;
+
 		for (int j = 0; j < qlen; j++) {
 			addr = matches[i] + j;
-			crt[addr] = (crt[addr] & 0xFF) | HIGHLIGHT_COLOR;
+			crt[addr] = (crt[addr] & 0xFF) | color;
 		}
 	}
 }
@@ -227,6 +229,9 @@ update_query(int c)
 			matches[mnum++] = i;
 		}
 	}
+
+	if (mnum == 0) curr_highlighted = -1;
+	else curr_highlighted = 0;
 
 	put_query_char(c);
 	paint_highlighs();
