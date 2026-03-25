@@ -135,6 +135,7 @@ void
 consoleintr(int (*getc)(void))
 {
 	int c, doprocdump = 0;
+	static int searching = 0;
 
 	acquire(&cons.lock);
 	while((c = getc()) >= 0){
@@ -156,7 +157,25 @@ consoleintr(int (*getc)(void))
 				consputc(BACKSPACE);
 			}
 			break;
-		case 0xFF:
+		case 0xFF:	// Alt + F
+			searching ^= 1;
+			int color = searching ? 0xF000 : 0x0700;
+
+			for (int i = 0; i < 1920; i++) {
+				crt[i] = (crt[i] & 0xFF) | color;
+			}
+
+			if (searching) {
+				char prompt[] = "Search:";
+
+				for (int i = 0; i < 7; i++) {
+					crt[1920 + i] = (prompt[i] & 0xFF) | 0x0200;
+				}
+			} else {
+				for (int i = 0; i < 80; i++) {
+					crt[1920 + i] = (' ' & 0xFF) | color;
+				}
+			}
 
 			break;
 		default:
