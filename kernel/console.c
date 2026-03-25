@@ -211,7 +211,13 @@ update_query(int c)
 		matching = 1;
 
 		for (int j = 0; j < qlen; j++) {
-			if ((crt[i + j] & 0xFF) != query[j]) {
+			char ch = crt[i + j] & 0xFF;
+
+			int match_exists = (ch == query[j]) ||
+							   ('a' <= ch && ch <= 'z' && ch == query[j] + 32) ||
+							   ('A' <= ch && ch <= 'Z' && ch == query[j] - 32);
+
+			if (!match_exists) {
 				matching = 0;
 				break;
 			}
