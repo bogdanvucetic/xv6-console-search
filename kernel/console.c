@@ -12,8 +12,6 @@
 #include "x86.h"
 #include "printf.h"
 
-#include "search.h"
-
 #include <stdarg.h>
 
 static void consputc(int);
@@ -132,6 +130,32 @@ struct {
 	uint e;  // Edit index
 } input;
 
+#define PROMPT "Search:"
+
+#define SEARCH_COLOR 0xF000
+#define HIGHLIGHT_COLOR 0xDF00
+#define SELECTED_COLOR 0x2F00
+
+struct search_state {
+	int active;
+	char query[80 - sizeof(PROMPT)];
+	int qlen;
+	int matches[1920];
+	int mnum;
+	int selected;
+	int prev_pos;
+	short prev_content[2000];
+};
+
+static struct search_state search = {
+	.active = 0,
+	.qlen = 0,
+	.mnum = 0,
+	.selected = -1
+};
+
+#define QCAPACITY (sizeof(search.query))
+
 #define C(x)  ((x)-'@')  // Control-x
 
 #define ALT_P	0x1C
@@ -179,11 +203,11 @@ paint_highlighs()
 
 	int addr;
 
-	for (int i = 0; i < mnum; i++) {
-		short color = i == curr_highlighted ? 0x2F00 : HIGHLIGHT_COLOR;
+	for (int i = 0; i < search.mnum; i++) {
+		short color = i == search.selected ? SELECTED_COLOR : HIGHLIGHT_COLOR;
 
-		for (int j = 0; j < qlen; j++) {
-			addr = matches[i] + j;
+		for (int j = 0; j < search.qlen; j++) {
+			addr = search.matches[i] + j;
 			crt[addr] = (crt[addr] & 0xFF) | color;
 		}
 	}
@@ -192,23 +216,23 @@ paint_highlighs()
 void
 find_matches()
 {
-	mnum = 0;
+	search.mnum = 0;
 	int matching;
 
-	if (qlen == 0) {
-		curr_highlighted = -1;
+	if (search.qlen == 0) {
+		search.selected = -1;
 		return;
 	}
 
-	for (int i = 0; i < 1920 - qlen + 1; i++) {
+	for (int i = 0; i < 1920 - search.qlen + 1; i++) {
 		matching = 1;
 
-		for (int j = 0; j < qlen; j++) {
+		for (int j = 0; j < search.qlen; j++) {
 			char ch = crt[i + j] & 0xFF;
 
-			int match_exists = (ch == query[j]) ||
-			('a' <= ch && ch <= 'z' && ch == query[j] + 32) ||
-			('A' <= ch && ch <= 'Z' && ch == query[j] - 32);
+			int match_exists = (ch == search.query[j]) ||
+			('a' <= ch && ch <= 'z' && ch == search.query[j] + 32) ||
+			('A' <= ch && ch <= 'Z' && ch == search.query[j] - 32);
 
 			if (!match_exists) {
 				matching = 0;
@@ -217,29 +241,29 @@ find_matches()
 		}
 
 		if (matching) {
-			matches[mnum++] = i;
+			search.matches[search.mnum++] = i;
 		}
 	}
 
-	if (mnum == 0) curr_highlighted = -1;
-	else curr_highlighted = 0;
+	if (search.mnum == 0) search.selected = -1;
+	else search.selected = 0;
 }
 
 void
 update_query(int c)
 {
 	if(c == BACKSPACE){
-		if (qlen <= 0) return;
+		if (search.qlen <= 0) return;
 
-		query[--qlen] = '\0';
+		search.query[--search.qlen] = '\0';
 
-		if(qlen == 0){
+		if(search.qlen == 0){
 			put_query_char(c);
 			clear_highlights();
 			return;
 		}
 	} else {
-		query[qlen++] = c;
+		search.query[search.qlen++] = c;
 	}
 
 	put_query_char(c);
@@ -260,33 +284,33 @@ searchintr(int (*getc)(void))
 				update_query(BACKSPACE);
 				break;
 			case ALT_F: // Exit
-				search_mode_active = 0;
+				search.active = 0;
 
 				for (int i = 0; i < 2000; i++) {
-					crt[i] = prev_content[i];
+					crt[i] = search.prev_content[i];
 				}
 
 				outb(CRTPORT, 14);
-				outb(CRTPORT+1, old_pos>>8);
+				outb(CRTPORT+1, search.prev_pos>>8);
 				outb(CRTPORT, 15);
-				outb(CRTPORT+1, old_pos);
-				crt[old_pos] = ' ' | 0x0700;
+				outb(CRTPORT+1, search.prev_pos);
+				crt[search.prev_pos] = ' ' | 0x0700;
 
 				break;
 			case ALT_P: // Prev
-				if (mnum > 0) {
-					curr_highlighted = (curr_highlighted + mnum - 1) % mnum;
+				if (search.mnum > 0) {
+					search.selected = (search.selected + search.mnum - 1) % search.mnum;
 					paint_highlighs();
 				}
 				break;
 			case ALT_N: // Next
-				if (mnum > 0) {
-					curr_highlighted = (curr_highlighted + mnum + 1) % mnum;
+				if (search.mnum > 0) {
+					search.selected = (search.selected + search.mnum + 1) % search.mnum;
 					paint_highlighs();
 				}
 				break;
 			default:
-				if(c >= ' ' && c <= '~' && qlen < query_capacity - 1){
+				if(c >= ' ' && c <= '~' && search.qlen < QCAPACITY - 1){
 					update_query(c);
 				}
 				break;
@@ -298,7 +322,7 @@ searchintr(int (*getc)(void))
 void
 consoleintr(int (*getc)(void))
 {
-	if(search_mode_active){
+	if(search.active){
 		searchintr(getc);
 		return;
 	}
@@ -326,33 +350,33 @@ consoleintr(int (*getc)(void))
 			}
 			break;
 		case ALT_F:
-			search_mode_active = 1;
+			search.active = 1;
 
 			char prompt[] = PROMPT;
 			int pos = 24 * 80;
 
 			for (int i = 0; i < 24 * 80; i++) {
-				prev_content[i] = crt[i];
+				search.prev_content[i] = crt[i];
 				crt[i] = (crt[i] & 0xFF) | SEARCH_COLOR;
 			}
 
-			for (int i = 0; i < PROMPT_LEN; i++) {
-				prev_content[pos + i] = crt[pos + i];
+			for (int i = 0; i < sizeof(prompt) - 1; i++) {
+				search.prev_content[pos + i] = crt[pos + i];
 				crt[pos++] = (prompt[i] & 0xFF) | 0x0200;
 			}
 
-			for (int i = 0; i < qlen; i++) {
-				prev_content[pos + i] = crt[pos + i];
-				crt[pos++] = (query[i] & 0xFF) | 0x0700;
+			for (int i = 0; i < search.qlen; i++) {
+				search.prev_content[pos + i] = crt[pos + i];
+				crt[pos++] = (search.query[i] & 0xFF) | 0x0700;
 			}
 
 			find_matches();
 			paint_highlighs();
 
 			outb(CRTPORT, 14);
-			old_pos = inb(CRTPORT+1) << 8;
+			search.prev_pos = inb(CRTPORT+1) << 8;
 			outb(CRTPORT, 15);
-			old_pos |= inb(CRTPORT+1);
+			search.prev_pos |= inb(CRTPORT+1);
 
 			outb(CRTPORT, 14);
 			outb(CRTPORT+1, pos>>8);
