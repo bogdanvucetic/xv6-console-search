@@ -134,9 +134,9 @@ struct {
 
 #define C(x)  ((x)-'@')  // Control-x
 
-#define ALT_P			0x1C
-#define ALT_F			0x1D
-#define ALT_N			0x1E
+#define ALT_P	0x1C
+#define ALT_F	0x1D
+#define ALT_N	0x1E
 
 void
 put_query_char(int c)
@@ -253,12 +253,8 @@ searchintr(int (*getc)(void))
 			case ALT_F: // Exit
 				search_mode_active = 0;
 
-				for (int i = 0; i < 1920; i++) {
-					crt[i] = (crt[i] & 0xFF) | 0x0700;
-				}
-
-				for (int i = 0; i < 80; i++) {
-					crt[1920 + i] = (' ' & 0xFF) | 0x0700;
+				for (int i = 0; i < 2000; i++) {
+					crt[i] = prev_content[i];
 				}
 
 				outb(CRTPORT, 14);
@@ -323,14 +319,17 @@ consoleintr(int (*getc)(void))
 			int pos = 24 * 80;
 
 			for (int i = 0; i < 24 * 80; i++) {
+				prev_content[i] = crt[i];
 				crt[i] = (crt[i] & 0xFF) | SEARCH_COLOR;
 			}
 
 			for (int i = 0; i < PROMPT_LEN; i++) {
+				prev_content[pos + i] = crt[pos + i];
 				crt[pos++] = (prompt[i] & 0xFF) | 0x0200;
 			}
 
 			for (int i = 0; i < qlen; i++) {
+				prev_content[pos + i] = crt[pos + i];
 				crt[pos++] = (query[i] & 0xFF) | 0x0700;
 				paint_highlighs();
 			}

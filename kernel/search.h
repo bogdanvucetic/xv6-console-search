@@ -9,6 +9,7 @@
 
 int search_mode_active = 0;
 int old_pos;
+short prev_content[2000];
 
 char query[80 - PROMPT_LEN];
 int qlen = 0;
