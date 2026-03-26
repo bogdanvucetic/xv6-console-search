@@ -256,8 +256,6 @@ searchintr(int (*getc)(void))
 	acquire(&cons.lock);
 	while((c = getc()) >= 0){
 		switch(c){
-			case '\n':
-				break;
 			case C('H'): case '\x7f':  // Backspace
 				update_query(BACKSPACE);
 				break;
@@ -276,15 +274,19 @@ searchintr(int (*getc)(void))
 
 				break;
 			case ALT_P: // Prev
-				curr_highlighted = (curr_highlighted + mnum - 1) % mnum;
-				paint_highlighs();
+				if (mnum > 0) {
+					curr_highlighted = (curr_highlighted + mnum - 1) % mnum;
+					paint_highlighs();
+				}
 				break;
 			case ALT_N: // Next
-				curr_highlighted = (curr_highlighted + mnum + 1) % mnum;
-				paint_highlighs();
+				if (mnum > 0) {
+					curr_highlighted = (curr_highlighted + mnum + 1) % mnum;
+					paint_highlighs();
+				}
 				break;
 			default:
-				if(c != 0 && qlen < query_capacity){
+				if(c >= ' ' && c <= '~' && qlen < query_capacity - 1){
 					update_query(c);
 				}
 				break;
