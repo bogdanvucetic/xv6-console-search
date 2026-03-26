@@ -190,6 +190,42 @@ paint_highlighs()
 }
 
 void
+find_matches()
+{
+	mnum = 0;
+	int matching;
+
+	if (qlen == 0) {
+		curr_highlighted = -1;
+		return;
+	}
+
+	for (int i = 0; i < 1920 - qlen + 1; i++) {
+		matching = 1;
+
+		for (int j = 0; j < qlen; j++) {
+			char ch = crt[i + j] & 0xFF;
+
+			int match_exists = (ch == query[j]) ||
+			('a' <= ch && ch <= 'z' && ch == query[j] + 32) ||
+			('A' <= ch && ch <= 'Z' && ch == query[j] - 32);
+
+			if (!match_exists) {
+				matching = 0;
+				break;
+			}
+		}
+
+		if (matching) {
+			matches[mnum++] = i;
+		}
+	}
+
+	if (mnum == 0) curr_highlighted = -1;
+	else curr_highlighted = 0;
+}
+
+void
 update_query(int c)
 {
 	if(c == BACKSPACE){
@@ -206,34 +242,9 @@ update_query(int c)
 		query[qlen++] = c;
 	}
 
-	mnum = 0;
-	int matching;
-
-	for (int i = 0; i < 1920 - qlen + 1; i++) {
-		matching = 1;
-
-		for (int j = 0; j < qlen; j++) {
-			char ch = crt[i + j] & 0xFF;
-
-			int match_exists = (ch == query[j]) ||
-							   ('a' <= ch && ch <= 'z' && ch == query[j] + 32) ||
-							   ('A' <= ch && ch <= 'Z' && ch == query[j] - 32);
-
-			if (!match_exists) {
-				matching = 0;
-				break;
-			}
-		}
-
-		if (matching) {
-			matches[mnum++] = i;
-		}
-	}
-
-	if (mnum == 0) curr_highlighted = -1;
-	else curr_highlighted = 0;
-
 	put_query_char(c);
+
+	find_matches();
 	paint_highlighs();
 }
 
@@ -331,8 +342,10 @@ consoleintr(int (*getc)(void))
 			for (int i = 0; i < qlen; i++) {
 				prev_content[pos + i] = crt[pos + i];
 				crt[pos++] = (query[i] & 0xFF) | 0x0700;
-				paint_highlighs();
 			}
+
+			find_matches();
+			paint_highlighs();
 
 			outb(CRTPORT, 14);
 			old_pos = inb(CRTPORT+1) << 8;
