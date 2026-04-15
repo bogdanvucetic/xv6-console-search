@@ -134,7 +134,10 @@ struct {
 
 #define DEFAULT_SEARCH_COLOR 0xF000
 #define MATCH_COLOR 0xDF00
+#define MATCH_COLOR_2 0x3F00
 #define SELECTED_COLOR 0x2F00
+
+static int match_color_variant = 0;
 
 struct search_state {
 	int active;
@@ -161,6 +164,7 @@ static struct search_state search = {
 #define ALT_P	0x1C
 #define ALT_F	0x1D
 #define ALT_N	0x1E
+#define ALT_B	0x20
 
 void
 queryputc(int c)
@@ -207,7 +211,12 @@ paint_matches()
 	int addr;
 
 	for (int i = 0; i < search.mnum; i++) {
-		color = i == search.selected ? SELECTED_COLOR : MATCH_COLOR;
+		if(i == search.selected)
+			color = SELECTED_COLOR;
+		else{
+			if(match_color_variant) color = MATCH_COLOR_2;
+			else color = MATCH_COLOR;
+		}
 
 		for (int j = 0; j < search.qlen; j++) {
 			addr = search.matches[i] + j;
@@ -307,6 +316,10 @@ searchintr(int (*getc)(void))
 					paint_matches();
 				}
 				break;
+			case ALT_B:
+				match_color_variant ^= 1;
+				paint_matches();
+				break;
 			default:
 				if(c >= ' ' && c <= '~' && search.qlen < QCAPACITY - 1){
 					update_query(c);
@@ -383,7 +396,7 @@ consoleintr(int (*getc)(void))
 			search.active = 1;
 			enter_search();
 			break;
-		case ALT_P: case ALT_N:
+		case ALT_P: case ALT_N: case ALT_B:
 			break;
 		default:
 			if(c != 0 && input.e-input.r < INPUT_BUF){
