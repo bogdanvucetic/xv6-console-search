@@ -33,10 +33,12 @@
 #define KEY_INS         0xE8
 #define KEY_DEL         0xE9
 
-#define ALT_P			0x1C
 #define ALT_F			0x1D
 #define ALT_N			0x1E
-#define ALT_B			0x20
+#define ALT_P			0x1C
+#define ALT_U			0xFF
+#define ALT_S			0xFE
+#define ALT_B			0xFD
 
 // C('A') == Control-A
 #define C(x) (x - '@')
@@ -122,8 +124,9 @@ static uchar ctlmap[256] =
 
 static uchar altmap[256] =
 {
-	[0x19] ALT_P,   [0x21]  ALT_F,
-	[0x31] ALT_N, 	[0x30]  ALT_B,
+	[0x16] ALT_U,   [0x19] ALT_P,
+	[0x21] ALT_F,	[0x1F] ALT_S,
+	[0x30] ALT_B,	[0x31] ALT_N,
 };
 
 #endif // KERNEL_KBD_H

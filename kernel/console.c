@@ -148,23 +148,70 @@ struct search_state {
 	int selected;
 	int prev_pos;
 	ushort prev_content[2000];
+	int is_secret;
+	int is_caps;
 };
 
 static struct search_state search = {
 	.active = 0,
 	.qlen = 0,
 	.mnum = 0,
-	.selected = -1
+	.selected = -1,
+	.is_secret = 0,
+	.is_caps = 0,
 };
 
 #define QCAPACITY (sizeof(search.query))
 
 #define C(x)  ((x)-'@')  // Control-x
 
-#define ALT_P	0x1C
-#define ALT_F	0x1D
-#define ALT_N	0x1E
-#define ALT_B	0x20
+#define ALT_F			0x1D
+#define ALT_N			0x1E
+#define ALT_P			0x1C
+#define ALT_U			0xFF
+#define ALT_S			0xFE
+#define ALT_B			0xFD
+
+void
+toggle_secret()
+{
+	if(search.is_secret){
+		for(int i = 0; i < search.qlen; i++){
+			crt[1920+sizeof(PROMPT)-1+i] = (' '&0xff) | 0x0700;
+		}
+	}else{
+		for(int i = 0; i < search.qlen; i++){
+			crt[1920+sizeof(PROMPT)-1+i] = (search.query[i]&0xff) | 0x0700;
+		}
+	}
+}
+
+void
+toggle_caps()
+{
+	if (search.mnum <= 0) return;
+
+	int color;
+	int ch;
+
+	for (int i = 0; i < search.mnum; i++) {
+		if(i == search.selected)
+			color = SELECTED_COLOR;
+		else{
+			if(match_color_variant) color = MATCH_COLOR_2;
+			else color = MATCH_COLOR;
+		}
+
+		for (int j = 0; j < search.qlen; j++) {
+			ch = crt[search.matches[i] + j] & 0xff;
+
+			if(search.is_caps && 'a' <= ch && ch <= 'z')
+				crt[search.matches[i] + j] = ((ch - 32) & 0xff) | color;
+			else if(!search.is_caps && 'A' <= ch && ch <= 'Z')
+				crt[search.matches[i] + j] = (search.prev_content[search.matches[i] + j] & 0xff) | color;
+		}
+	}
+}
 
 void
 queryputc(int c)
@@ -179,8 +226,13 @@ queryputc(int c)
 
 	if (c == BACKSPACE){
 		if(pos > 0) --pos;
-	} else
-		crt[pos++] = (c&0xff) | 0x0700;
+	} else {
+		if(search.is_secret)
+			crt[pos++] = (' '&0xff) | 0x0700;
+		else
+			crt[pos++] = (c&0xff) | 0x0700;
+	}
+
 
 	if(pos < 24*80 || pos > 25*80)
 		panic("pos under/overflow");
@@ -320,6 +372,14 @@ searchintr(int (*getc)(void))
 				match_color_variant ^= 1;
 				paint_matches();
 				break;
+			case ALT_U:
+				search.is_caps ^= 1;
+				toggle_caps();
+				break;
+			case ALT_S:
+				search.is_secret ^= 1;
+				toggle_secret();
+				break;
 			default:
 				if(c >= ' ' && c <= '~' && search.qlen < QCAPACITY - 1){
 					update_query(c);
@@ -396,7 +456,7 @@ consoleintr(int (*getc)(void))
 			search.active = 1;
 			enter_search();
 			break;
-		case ALT_P: case ALT_N: case ALT_B:
+		case ALT_P: case ALT_N: case ALT_B: case ALT_U: case ALT_S:
 			break;
 		default:
 			if(c != 0 && input.e-input.r < INPUT_BUF){
